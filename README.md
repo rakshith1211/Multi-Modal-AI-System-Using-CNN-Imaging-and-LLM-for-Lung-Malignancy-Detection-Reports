@@ -1,0 +1,2 @@
+# Multi-Modal-AI-System-Using-CNN-Imaging-and-LLM-for-Lung-Malignancy-Detection-Reports
+A deep learning project for lung cancer classification using medical images. A CNN model classifies lung tissue into four classes: adenocarcinoma, large cell carcinoma, squamous cell carcinoma, and normal tissue. An LLM generates automated medical reports, with tools for accuracy metrics, confusion matrices, and performance analysis in Python.
