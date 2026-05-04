@@ -1,149 +1,230 @@
 #!/usr/bin/env python3
 """
-Setup script for the Lung Cancer Classifier project
-Handles initial setup, dependency installation, and basic configuration
+Setup Script for Lung Cancer Classifier
+Automates initial project setup and verification
 """
 
 import os
 import sys
 import subprocess
-import platform
+from pathlib import Path
 
-def print_header():
-    print("🫁 Lung Cancer Classifier - Setup Script")
-    print("=" * 50)
-    print("Setting up your clinical-grade AI diagnostic system...")
-    print()
+def print_header(text):
+    """Print formatted header"""
+    print("\n" + "=" * 80)
+    print(f"  {text}")
+    print("=" * 80 + "\n")
+
+def print_step(step_num, text):
+    """Print step information"""
+    print(f"\n[Step {step_num}] {text}")
+    print("-" * 80)
 
 def check_python_version():
-    """Check if Python version is compatible"""
+    """Verify Python version"""
+    print_step(1, "Checking Python Version")
+    
     version = sys.version_info
+    print(f"Python version: {version.major}.{version.minor}.{version.micro}")
+    
     if version.major < 3 or (version.major == 3 and version.minor < 8):
-        print("❌ Python 3.8 or higher is required!")
-        print(f"Current version: {version.major}.{version.minor}.{version.micro}")
+        print("❌ Error: Python 3.8 or higher is required")
         return False
     
-    print(f"✅ Python version: {version.major}.{version.minor}.{version.micro}")
+    print("✓ Python version is compatible")
     return True
 
 def create_directories():
     """Create necessary directories"""
+    print_step(2, "Creating Project Directories")
+    
     directories = [
         'models',
-        'uploads', 
-        'static/images',
-        'static/css',
-        'static/js'
+        'uploads',
+        'logs',
+        'static/images'
     ]
     
-    print("📁 Creating project directories...")
     for directory in directories:
-        os.makedirs(directory, exist_ok=True)
-        print(f"   ✅ {directory}")
+        Path(directory).mkdir(parents=True, exist_ok=True)
+        print(f"✓ Created: {directory}/")
+    
+    return True
+
+def create_env_file():
+    """Create .env file if it doesn't exist"""
+    print_step(3, "Setting Up Environment Variables")
+    
+    if os.path.exists('.env'):
+        print("⚠️  .env file already exists, skipping...")
+        return True
+    
+    env_content = """# Flask Configuration
+FLASK_SECRET_KEY=change-this-to-a-random-secret-key-in-production
+FLASK_ENV=development
+
+# OpenAI API (Optional - for GPT-powered medical reports)
+# Get your API key from: https://platform.openai.com/api-keys
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Database Configuration (Optional - defaults to SQLite)
+DATABASE_URL=sqlite:///users.db
+
+# Model Configuration (Optional)
+MODEL_PATH=models/best_model.pth
+
+# Logging
+LOG_LEVEL=INFO
+"""
+    
+    with open('.env', 'w') as f:
+        f.write(env_content)
+    
+    print("✓ Created .env file")
+    print("⚠️  IMPORTANT: Edit .env and set your FLASK_SECRET_KEY and OPENAI_API_KEY")
+    return True
+
+def check_dataset():
+    """Verify dataset structure"""
+    print_step(4, "Checking Dataset Structure")
+    
+    if not os.path.exists('DATASET'):
+        print("⚠️  DATASET directory not found")
+        print("   Please create DATASET/ with train/, valid/, and test/ subdirectories")
+        return False
+    
+    required_splits = ['train', 'valid', 'test']
+    expected_classes = ['adenocarcinoma', 'large.cell.carcinoma', 'normal', 'squamous.cell.carcinoma']
+    
+    all_good = True
+    for split in required_splits:
+        split_path = os.path.join('DATASET', split)
+        if not os.path.exists(split_path):
+            print(f"❌ Missing: DATASET/{split}/")
+            all_good = False
+        else:
+            classes = [d for d in os.listdir(split_path) 
+                      if os.path.isdir(os.path.join(split_path, d))]
+            print(f"✓ Found DATASET/{split}/ with {len(classes)} class(es)")
+            
+            # Check if renaming is needed
+            needs_renaming = any('_' in c and c not in expected_classes for c in classes)
+            if needs_renaming:
+                print(f"  ⚠️  Some folders have extended names. Run: python fix_dataset_names.py")
+    
+    return all_good
 
 def install_dependencies():
     """Install Python dependencies"""
-    print("\n📦 Installing Python dependencies...")
+    print_step(5, "Installing Dependencies")
+    
+    if not os.path.exists('requirements.txt'):
+        print("❌ requirements.txt not found")
+        return False
+    
+    print("Installing packages from requirements.txt...")
+    print("This may take several minutes...\n")
+    
     try:
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt'])
-        print("✅ Dependencies installed successfully!")
+        print("\n✓ All dependencies installed successfully")
         return True
     except subprocess.CalledProcessError:
-        print("❌ Failed to install dependencies!")
-        print("Please run: pip install -r requirements.txt")
+        print("\n❌ Failed to install dependencies")
+        print("   Try manually: pip install -r requirements.txt")
         return False
 
-def setup_environment():
-    """Setup environment file if it doesn't exist"""
-    env_file = '.env'
-    if not os.path.exists(env_file):
-        print(f"\n🔧 Creating {env_file} file...")
-        with open(env_file, 'w') as f:
-            f.write("# Lung Cancer Classifier Environment Variables\n")
-            f.write("OPENAI_API_KEY=your_openai_api_key_here\n")
-            f.write("FLASK_SECRET_KEY=your_secret_key_here\n")
-        print(f"✅ {env_file} created!")
-        print("⚠️  Please update the API keys in the .env file")
-    else:
-        print(f"✅ {env_file} already exists")
-
-def create_sample_assets():
-    """Create sample confusion matrix"""
-    print("\n🎨 Creating sample assets...")
-    try:
-        subprocess.check_call([sys.executable, 'create_sample_confusion_matrix.py'])
-        print("✅ Sample confusion matrix created!")
-    except subprocess.CalledProcessError:
-        print("⚠️  Could not create sample confusion matrix")
-        print("You can run: python create_sample_confusion_matrix.py")
-
-def check_dataset():
-    """Check if dataset exists"""
-    dataset_dir = 'DATASET'
-    if os.path.exists(dataset_dir):
-        print(f"✅ Dataset directory found: {dataset_dir}")
-        
-        # Check for required subdirectories
-        required_dirs = ['train', 'valid', 'test']
-        for subdir in required_dirs:
-            path = os.path.join(dataset_dir, subdir)
-            if os.path.exists(path):
-                print(f"   ✅ {subdir} directory found")
-            else:
-                print(f"   ⚠️  {subdir} directory missing")
-    else:
-        print(f"⚠️  Dataset directory not found: {dataset_dir}")
-        print("Please ensure the DATASET folder is in the project root")
+def verify_installation():
+    """Verify key packages are installed"""
+    print_step(6, "Verifying Installation")
+    
+    required_packages = [
+        'flask',
+        'torch',
+        'efficientnet_pytorch',
+        'flask_sqlalchemy',
+        'dotenv'
+    ]
+    
+    all_installed = True
+    for package in required_packages:
+        try:
+            __import__(package)
+            print(f"✓ {package}")
+        except ImportError:
+            print(f"❌ {package} not found")
+            all_installed = False
+    
+    return all_installed
 
 def print_next_steps():
     """Print next steps for the user"""
-    print("\n🎉 Setup completed!")
-    print("\n📋 Next Steps:")
-    print("1. Update API keys in .env file:")
-    print("   - Get OpenAI API key from: https://platform.openai.com/api-keys")
-    print("   - Set FLASK_SECRET_KEY to a random string")
-    print()
-    print("2. Optional - Train the model:")
-    print("   python train_model.py")
-    print()
-    print("3. Run the application:")
-    print("   python app.py")
-    print()
-    print("4. Open your browser and go to:")
-    print("   http://localhost:5000")
-    print()
-    print("🔐 Login with any username/password combination")
-    print()
-    print("📚 For more information, see README.md")
+    print_header("Setup Complete!")
+    
+    print("Next Steps:")
+    print("\n1. Configure Environment Variables:")
+    print("   - Edit .env file")
+    print("   - Set FLASK_SECRET_KEY to a random secret")
+    print("   - (Optional) Add OPENAI_API_KEY for GPT-powered reports")
+    
+    print("\n2. Prepare Dataset:")
+    print("   - Ensure DATASET/ folder has train/, valid/, test/ subdirectories")
+    print("   - Run: python fix_dataset_names.py (if needed)")
+    
+    print("\n3. Train Model:")
+    print("   - Run: python train_model.py")
+    print("   - This will create models/best_model.pth")
+    
+    print("\n4. Start Application:")
+    print("   - Run: python app.py")
+    print("   - Open browser to: http://localhost:5000")
+    print("   - Default login: username=rakshith, password=Rakshith@21")
+    
+    print("\n5. (Optional) Create New User:")
+    print("   - Click 'Register' on login page")
+    print("   - Fill in registration form")
+    
+    print("\n" + "=" * 80)
+    print("For detailed documentation, see README.md")
+    print("=" * 80 + "\n")
 
 def main():
     """Main setup function"""
-    print_header()
+    print_header("Lung Cancer Classifier - Setup Script")
     
-    # Check Python version
-    if not check_python_version():
-        sys.exit(1)
+    # Run setup steps
+    steps = [
+        ("Checking Python version", check_python_version),
+        ("Creating directories", create_directories),
+        ("Creating .env file", create_env_file),
+        ("Checking dataset", check_dataset),
+    ]
     
-    # Create directories
-    create_directories()
+    for step_name, step_func in steps:
+        if not step_func():
+            print(f"\n⚠️  Warning: {step_name} encountered issues")
+            print("   You may need to fix these manually")
     
-    # Install dependencies
-    if not install_dependencies():
-        print("\n⚠️  Setup completed with warnings.")
-        print("Please install dependencies manually and run setup again.")
-        return
+    # Ask about installing dependencies
+    print("\n" + "=" * 80)
+    response = input("Install Python dependencies now? (y/n): ").lower().strip()
     
-    # Setup environment
-    setup_environment()
-    
-    # Create sample assets
-    create_sample_assets()
-    
-    # Check dataset
-    check_dataset()
+    if response == 'y':
+        install_dependencies()
+        verify_installation()
+    else:
+        print("\nSkipping dependency installation.")
+        print("Install later with: pip install -r requirements.txt")
     
     # Print next steps
     print_next_steps()
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\nSetup interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n\nSetup failed with error: {str(e)}")
+        sys.exit(1)

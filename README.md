@@ -1,228 +1,357 @@
 # Enhanced Clinical-Grade Lung Cancer Classifier
 
-A comprehensive full-stack web application for multi-class lung cancer classification from CT scans using EfficientNet-B4 deep learning architecture and GPT-3.5 medical reporting.
+A production-ready deep learning application for lung cancer classification using EfficientNet-B4, Flask, and PyTorch.
 
-## 🎯 Project Overview
+## Features
 
-This application provides clinical-grade AI-powered lung cancer classification with the following capabilities:
+- **Deep Learning Model**: EfficientNet-B4 with transfer learning
+- **4-Class Classification**: Adenocarcinoma, Large Cell Carcinoma, Squamous Cell Carcinoma, Normal
+- **Web Interface**: Flask-based responsive UI
+- **User Authentication**: SQLite database with secure password hashing
+- **Medical Reports**: GPT-powered comprehensive medical reports (with fallback)
+- **Performance Metrics**: Detailed model evaluation and visualization
 
-- **Multi-class Classification**: Adenocarcinoma, Large Cell Carcinoma, Squamous Cell Carcinoma, and Normal (non-cancerous)
-- **High Performance**: 95.0% accuracy, 88.39% precision, 95.14% recall, 91.64% F1-score
-- **Professional Web Interface**: Modern, responsive design with authentication
-- **AI-Generated Reports**: GPT-3.5 powered medical report generation
-- **Real-time Predictions**: Instant CT scan analysis with confidence scoring
-
-## 🏗️ Architecture
-
-### Backend (Python/Flask)
-- **Model**: EfficientNet-B4 with transfer learning
-- **Training**: Focal Loss, AdamW optimizer, LR scheduling
-- **Data Processing**: Advanced augmentation, 224×224 input size
-- **API**: RESTful endpoints for prediction and file upload
-
-### Frontend (HTML/CSS/JavaScript)
-- **Framework**: Bootstrap 5 with custom CSS
-- **Features**: Drag-and-drop upload, live preview, responsive design
-- **Pages**: Login, Home, Prediction, Performance Analysis
-
-### AI/ML Components
-- **Image Preprocessing**: Noise reduction, normalization, resizing
-- **Data Augmentation**: Rotation, ColorJitter, RandomErasing, Mixup
-- **Model Training**: Enhanced trainer with focal loss for class imbalance
-- **Medical Reporting**: OpenAI GPT-3.5 integration
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-MAJOR_PROJECT/
-├── DATASET/                    # Lung cancer CT scan dataset
-│   ├── train/                 # Training images (4 classes)
-│   ├── valid/                 # Validation images
-│   └── test/                  # Test images
-├── models/                    # Trained model checkpoints
-├── static/                    # Web assets
-│   ├── css/                  # Stylesheets
-│   ├── js/                   # JavaScript files
-│   └── images/               # Static images
-├── templates/                 # HTML templates
-├── uploads/                   # Temporary file uploads
-├── app.py                    # Flask web application
-├── predictor.py              # Prediction engine
-├── model_trainer.py          # Model training logic
-├── data_preprocessor.py      # Data preprocessing
-├── medical_report_generator.py # GPT-3.5 report generation
-├── train_model.py            # Training script
-├── requirements.txt          # Python dependencies
-└── .env                      # Environment variables
+lung-cancer-classifier/
+├── app.py                          # Main Flask application
+├── config.py                       # Centralized configuration
+├── database.py                     # SQLAlchemy models
+├── predictor.py                    # Prediction engine
+├── model_trainer.py                # Training utilities
+├── train_model.py                  # Training script
+├── medical_report_generator.py     # Report generation
+├── data_preprocessor.py            # Data preprocessing
+├── fix_dataset_names.py            # Dataset folder renaming utility
+├── requirements.txt                # Python dependencies
+├── .env                            # Environment variables (create this)
+├── DATASET/                        # Dataset directory
+│   ├── train/                      # Training images
+│   ├── valid/                      # Validation images
+│   └── test/                       # Test images
+├── models/                         # Trained models
+│   └── best_model.pth             # Best model weights
+├── uploads/                        # Temporary upload directory
+└── templates/                      # HTML templates
 ```
 
-## 🚀 Quick Start
+## Installation
 
-### 1. Environment Setup
+### 1. Clone Repository
 
 ```bash
-# Clone or download the project
-cd MAJOR_PROJECT
+git clone <repository-url>
+cd lung-cancer-classifier
+```
 
-# Create virtual environment
+### 2. Create Virtual Environment
+
+```bash
+# Windows
 python -m venv venv
-venv\Scripts\activate  # Windows
-# source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate
 
-# Install dependencies
+# Linux/Mac
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3. Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configuration
+### 4. Configure Environment Variables
 
-Edit `.env` file with your API keys:
+Create a `.env` file in the project root:
+
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
-FLASK_SECRET_KEY=your_secret_key_here
+# Flask Configuration
+FLASK_SECRET_KEY=your-secret-key-here-change-this
+
+# OpenAI API (Optional - for GPT-powered reports)
+OPENAI_API_KEY=your-openai-api-key-here
+
+# Database (Optional - defaults to SQLite)
+DATABASE_URL=sqlite:///users.db
+
+# Environment
+FLASK_ENV=development
 ```
 
-### 3. Generate Sample Assets
+## Dataset Setup
+
+### Step 1: Fix Dataset Folder Names
+
+If your training folders have extended names (e.g., `adenocarcinoma_left.lower.lobe_T2_N0_M0_Ib`), run the renaming script:
 
 ```bash
-# Create sample confusion matrix
-python create_sample_confusion_matrix.py
+python fix_dataset_names.py
 ```
 
-### 4. Optional: Train Model
+This will:
+- Rename training/validation folders to match test folder structure
+- Map extended names to base cancer types
+- Verify dataset consistency
+
+### Step 2: Verify Dataset Structure
+
+Ensure your dataset follows this structure:
+
+```
+DATASET/
+├── train/
+│   ├── adenocarcinoma/
+│   ├── large.cell.carcinoma/
+│   ├── normal/
+│   └── squamous.cell.carcinoma/
+├── valid/
+│   ├── adenocarcinoma/
+│   ├── large.cell.carcinoma/
+│   ├── normal/
+│   └── squamous.cell.carcinoma/
+└── test/
+    ├── adenocarcinoma/
+    ├── large.cell.carcinoma/
+    ├── normal/
+    └── squamous.cell.carcinoma/
+```
+
+## Training the Model
+
+### Quick Start Training
 
 ```bash
-# Train the EfficientNet-B4 model (1-3 hours)
 python train_model.py
 ```
 
-### 5. Run Application
+### Training Features
+
+- **Transfer Learning**: Pre-trained EfficientNet-B4
+- **Focal Loss**: Handles class imbalance
+- **AdamW Optimizer**: Better generalization
+- **Learning Rate Scheduling**: ReduceLROnPlateau
+- **Early Stopping**: Prevents overfitting
+- **Automatic Checkpointing**: Saves best model
+
+### Training Configuration
+
+Edit `train_model.py` to customize:
+
+```python
+config = {
+    'epochs': 30,
+    'batch_size': 16,
+    'learning_rate': 0.001,
+    'weight_decay': 0.01,
+    'patience': 5,  # Early stopping
+}
+```
+
+### Training Output
+
+- Model saved to: `models/best_model.pth`
+- Confusion matrix: `confusion_matrix.png`
+- Training logs: `training_YYYYMMDD_HHMMSS.log`
+
+## Running the Application
+
+### 1. Initialize Database
+
+The database is automatically created on first run with a default user:
+
+- Username: `rakshith`
+- Password: `Rakshith@21`
+
+### 2. Start Flask Server
 
 ```bash
-# Start the web server
 python app.py
 ```
 
-Visit `http://localhost:5000` in your browser.
+The application will be available at: `http://localhost:5000`
 
-## 🔐 Authentication
+### 3. Access the Application
 
-The application supports the following login credentials:
+1. Open browser to `http://localhost:5000`
+2. Login with credentials or register new account
+3. Upload CT scan images for prediction
+4. View results and medical reports
 
-### **Primary Login (Recommended)**
-- **Username**: `rakshith`
-- **Password**: `Rakshith@21`
+## Features Guide
 
-### **Demo Login (Alternative)**
-- **Username**: Any non-empty string
-- **Password**: Any non-empty string
+### User Authentication
 
-**Note**: For the best experience and full functionality, use the primary login credentials above.
+- **Registration**: Create new user accounts
+- **Login**: Secure password-based authentication
+- **Password Reset**: OTP-based password recovery
+- **Session Management**: Secure session handling
 
-## 📊 Model Performance
+### Prediction
 
-| Metric | Value |
-|--------|-------|
-| **Overall Accuracy** | 95.0% |
-| **Precision** | 88.39% |
-| **Recall** | 95.14% |
-| **F1-Score** | 91.64% |
+1. Navigate to Prediction page
+2. Upload CT scan image (PNG, JPG, JPEG)
+3. View classification results with confidence scores
+4. Download comprehensive medical report
 
-### Per-Class Performance
-- **Adenocarcinoma**: 92.1% precision, 89.5% recall
-- **Large Cell Carcinoma**: 87.3% precision, 94.2% recall  
-- **Normal**: 98.7% precision, 96.8% recall
-- **Squamous Cell Carcinoma**: 85.4% precision, 90.1% recall
+### Performance Metrics
 
-## 🎨 Features
+- Overall accuracy
+- Per-class precision, recall, F1-score
+- Confusion matrix visualization
+- Class-wise performance breakdown
 
-### Web Interface
-- **Login Page**: Professional authentication interface
-- **Home Dashboard**: Project overview and navigation
-- **Prediction Page**: CT scan upload and analysis
-- **Performance Page**: Model metrics and confusion matrix
+## API Endpoints
 
-### AI Capabilities
-- **Image Upload**: Drag-and-drop or file selection
-- **Live Preview**: Real-time image preview before analysis
-- **Confidence Scoring**: Prediction confidence with class probabilities
-- **Medical Reports**: AI-generated clinical reports with recommendations
+### Authentication
 
-### User Experience
-- **Responsive Design**: Works on desktop, tablet, and mobile
-- **Real-time Feedback**: Loading states and progress indicators
-- **Error Handling**: Comprehensive error messages and validation
-- **Accessibility**: WCAG compliant design elements
+- `POST /register` - Register new user
+- `POST /login` - User login
+- `GET /logout` - User logout
+- `POST /send-otp` - Send OTP for password reset
+- `POST /verify-otp` - Verify OTP
+- `POST /reset-password` - Reset password
 
-## 🔬 Technical Details
+### Prediction
 
-### Model Architecture
-- **Base Model**: EfficientNet-B4 (19M parameters)
-- **Input Size**: 224×224×3 RGB images
-- **Output**: 4-class softmax classification
-- **Training**: Transfer learning with fine-tuning
+- `POST /predict` - Upload image and get prediction
+- `GET /performance` - View model performance metrics
 
-### Data Processing
-- **Preprocessing**: Resize, normalize, noise reduction
-- **Augmentation**: Rotation, color jitter, random erasing
-- **Batch Size**: 16 (adjustable based on GPU memory)
-- **Optimization**: AdamW with ReduceLROnPlateau scheduling
+## Database Schema
 
-### Medical Reporting
-- **LLM Integration**: OpenAI GPT-3.5-turbo
-- **Report Sections**: Findings, confidence, recommendations, disclaimer
-- **Fallback**: Local report generation if API unavailable
-- **Export**: Print and download functionality
+### Users Table
 
-## ⚠️ Important Disclaimers
+```sql
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    username VARCHAR(80) UNIQUE NOT NULL,
+    email VARCHAR(120) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(120) NOT NULL,
+    mobile VARCHAR(20) UNIQUE NOT NULL,
+    user_type VARCHAR(20) DEFAULT 'registered',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_login DATETIME
+);
+```
 
-- **Research Purpose**: This system is for research and educational use only
-- **Not Medical Device**: Not approved for clinical diagnosis or treatment
-- **Professional Review**: All results require qualified medical professional review
-- **No Liability**: Authors assume no responsibility for medical decisions based on this system
+### OTPs Table
 
-## 🛠️ Development
+```sql
+CREATE TABLE otps (
+    id INTEGER PRIMARY KEY,
+    mobile VARCHAR(20) NOT NULL,
+    otp_code VARCHAR(6) NOT NULL,
+    username VARCHAR(80) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE
+);
+```
 
-### Adding New Features
-1. Backend changes in `app.py` and related modules
-2. Frontend updates in `templates/` and `static/`
-3. Model improvements in `model_trainer.py`
+## Configuration
 
-### Customization
-- Modify CSS in `static/css/style.css`
-- Update JavaScript in `static/js/`
-- Adjust model parameters in training scripts
+### Centralized Settings
 
-### Deployment
-- Configure production WSGI server (Gunicorn, uWSGI)
-- Set up reverse proxy (Nginx, Apache)
-- Use production database for user management
-- Implement proper security measures
+All configuration is managed in `config.py`:
 
-## 📝 License
+```python
+from config import get_config
 
-This project is for educational and research purposes. Please ensure compliance with medical software regulations in your jurisdiction before any clinical use.
+# Get configuration for current environment
+config = get_config('development')  # or 'production', 'testing'
+```
 
-## 🤝 Contributing
+### Environment-Specific Settings
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Open Pull Request
+- **Development**: Debug mode, SQL logging enabled
+- **Production**: HTTPS required, optimized settings
+- **Testing**: In-memory database, CSRF disabled
 
-## 📞 Support
+## Model Architecture
 
-For questions or issues:
-1. Check the documentation
-2. Review error logs in the console
-3. Ensure all dependencies are installed correctly
-4. Verify dataset structure and file permissions
+### EfficientNet-B4
 
-**Technical Support:**
-- **Developer**: Rakshith
-- **Phone**: +91 9390175239
-- **Contact for**: System issues, feature requests, technical assistance
+- **Input Size**: 380x380 pixels
+- **Parameters**: ~19M
+- **Architecture**: Compound scaling (depth, width, resolution)
+- **Transfer Learning**: ImageNet pre-trained weights
+- **Custom Head**: 4-class classification layer
 
----
+### Training Strategy
 
-**Built with ❤️ for advancing medical AI research**
+1. **Data Augmentation**: Random flips, rotations, color jitter
+2. **Focal Loss**: α=1, γ=2 for class imbalance
+3. **Optimizer**: AdamW with weight decay 0.01
+4. **Learning Rate**: 0.001 with ReduceLROnPlateau
+5. **Early Stopping**: Patience of 5 epochs
+
+## Troubleshooting
+
+### Common Issues
+
+**1. CUDA Out of Memory**
+```bash
+# Reduce batch size in train_model.py
+batch_size = 8  # or 4
+```
+
+**2. OpenAI API Errors**
+- Check API key in `.env`
+- Verify API quota
+- Application will use fallback reports automatically
+
+**3. Database Locked**
+```bash
+# Delete and recreate database
+rm users.db
+python app.py  # Will recreate automatically
+```
+
+**4. Model Not Found**
+```bash
+# Train model first
+python train_model.py
+```
+
+## Production Deployment
+
+### Security Checklist
+
+- [ ] Change `FLASK_SECRET_KEY` in `.env`
+- [ ] Set `FLASK_ENV=production`
+- [ ] Enable HTTPS
+- [ ] Use production database (PostgreSQL recommended)
+- [ ] Configure proper logging
+- [ ] Set up backup strategy
+- [ ] Implement rate limiting
+- [ ] Add CSRF protection
+
+### Recommended Stack
+
+- **Web Server**: Gunicorn or uWSGI
+- **Reverse Proxy**: Nginx
+- **Database**: PostgreSQL
+- **Caching**: Redis
+- **Monitoring**: Prometheus + Grafana
+
+## License
+
+This project is for educational and research purposes only. Not intended for clinical use without proper validation and regulatory approval.
+
+## Disclaimer
+
+⚠️ **IMPORTANT**: This AI system is designed to assist healthcare professionals, not replace them. All predictions must be validated by qualified medical practitioners before any clinical decisions are made.
+
+## Support
+
+For issues, questions, or contributions, please open an issue on the repository.
+
+## Acknowledgments
+
+- EfficientNet architecture by Google Research
+- PyTorch deep learning framework
+- Flask web framework
+- OpenAI GPT for medical report generation

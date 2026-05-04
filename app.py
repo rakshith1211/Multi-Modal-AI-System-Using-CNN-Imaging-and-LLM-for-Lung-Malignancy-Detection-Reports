@@ -7,11 +7,20 @@ from dotenv import load_dotenv
 import random
 import time
 from datetime import datetime, timedelta
+from database import db, User, OTP, init_db, normalize_mobile_number
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'your-secret-key-here')
+
+# Database Configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ECHO'] = False  # Set to True for SQL query logging
+
+# Initialize database
+init_db(app)
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
@@ -19,22 +28,18 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Initialize predictor
-predictor = LungCancerPredictor()
+# Initialize predictor (will be cached after first load)
+predictor = None
 
-# User database (in production, use a proper database)
-USERS_DB = {
-    'rakshith': {
-        'password': 'Rakshith@21',
-        'mobile': '+91-9390175239',
-        'email': 'rakshith@medicalai.com',
-        'full_name': 'Dr. Rakshith',
-        'user_type': 'primary'
-    }
-}
-
-# OTP storage (in production, use Redis or database)
-OTP_STORAGE = {}
+def get_predictor():
+    """
+    Get or initialize predictor (lazy loading with caching)
+    This avoids loading the model on every request
+    """
+    global predictor
+    if predictor is None:
+        predictor = LungCancerPredictor()
+    return predictor
 
 def generate_otp():
     """Generate a 6-digit OTP"""
@@ -49,61 +54,7 @@ def send_otp_sms(mobile_number, otp):
     print(f"🔐 Demo OTP Code: {otp}")
     print(f"📞 Mobile: {mobile_number}")
     print("=" * 50)
-    # For demo purposes, we'll just print the OTP
-    # In production, replace this with actual SMS API call
     return True
-    return True
-
-def is_otp_valid(mobile_number, entered_otp):
-    """Check if OTP is valid and not expired"""
-    if mobile_number not in OTP_STORAGE:
-        return False
-    
-    stored_data = OTP_STORAGE[mobile_number]
-    stored_otp = stored_data['otp']
-    timestamp = stored_data['timestamp']
-    
-    # Check if OTP is expired (5 minutes)
-    if datetime.now() - timestamp > timedelta(minutes=5):
-        del OTP_STORAGE[mobile_number]
-        return False
-    
-    return stored_otp == entered_otp
-
-def normalize_mobile_number(mobile):
-    """Normalize mobile number to a standard format for comparison"""
-    if not mobile:
-        return None
-    
-    # Remove all non-digit characters
-    digits_only = ''.join(filter(str.isdigit, mobile))
-    
-    # Handle different formats
-    if digits_only.startswith('91') and len(digits_only) == 12:
-        # +91xxxxxxxxxx format
-        return f"+91-{digits_only[2:]}"
-    elif len(digits_only) == 10:
-        # xxxxxxxxxx format (assume Indian number)
-        return f"+91-{digits_only}"
-    elif digits_only.startswith('0') and len(digits_only) == 11:
-        # 0xxxxxxxxxx format
-        return f"+91-{digits_only[1:]}"
-    else:
-        # Return as-is with +91- prefix if not already present
-        if not mobile.startswith('+91'):
-            return f"+91-{digits_only}"
-        return mobile
-
-def get_user_by_mobile(mobile_number):
-    """Find user by mobile number (strict matching)"""
-    normalized_input = normalize_mobile_number(mobile_number)
-    
-    for username, user_data in USERS_DB.items():
-        stored_mobile = normalize_mobile_number(user_data['mobile'])
-        if stored_mobile == normalized_input:
-            return username, user_data
-    
-    return None, None
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -118,6 +69,7 @@ def register_page():
 
 @app.route('/register', methods=['POST'])
 def register():
+    """Handle user registration with database storage"""
     full_name = request.form.get('full_name')
     username = request.form.get('username')
     email = request.form.get('email')
@@ -138,57 +90,75 @@ def register():
         flash('Password must be at least 6 characters long.', 'danger')
         return render_template('register.html')
     
+    # Normalize mobile number
+    normalized_mobile = normalize_mobile_number(mobile)
+    
     # Check if username already exists
-    if username in USERS_DB:
+    if User.query.filter_by(username=username).first():
         flash('Username already exists. Please choose a different one.', 'danger')
         return render_template('register.html')
     
+    # Check if email already exists
+    if User.query.filter_by(email=email).first():
+        flash('Email already registered. Please use a different email.', 'danger')
+        return render_template('register.html')
+    
     # Check if mobile number already exists
-    normalized_mobile = normalize_mobile_number(mobile)
-    for existing_user, user_data in USERS_DB.items():
-        if normalize_mobile_number(user_data['mobile']) == normalized_mobile:
-            flash('Mobile number already registered. Please use a different number.', 'danger')
-            return render_template('register.html')
+    if User.query.filter_by(mobile=normalized_mobile).first():
+        flash('Mobile number already registered. Please use a different number.', 'danger')
+        return render_template('register.html')
     
-    # Create new user
-    USERS_DB[username] = {
-        'password': password,
-        'mobile': normalized_mobile,
-        'email': email,
-        'full_name': full_name,
-        'user_type': 'registered'
-    }
-    
-    flash(f'Account created successfully for {full_name}! You can now login.', 'success')
-    return redirect(url_for('index'))
+    try:
+        # Create new user
+        new_user = User(
+            username=username,
+            email=email,
+            full_name=full_name,
+            mobile=normalized_mobile,
+            user_type='registered'
+        )
+        new_user.set_password(password)
+        
+        db.session.add(new_user)
+        db.session.commit()
+        
+        flash(f'Account created successfully for {full_name}! You can now login.', 'success')
+        return redirect(url_for('index'))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Registration failed: {str(e)}', 'danger')
+        return render_template('register.html')
 
 @app.route('/login', methods=['POST'])
 def login():
+    """Handle user login with database authentication"""
     username = request.form.get('username')
     password = request.form.get('password')
     
-    # Check for any registered user credentials
-    if username in USERS_DB and USERS_DB[username]['password'] == password:
-        user_data = USERS_DB[username]
-        session['logged_in'] = True
-        session['username'] = username
-        session['user_type'] = user_data['user_type']
-        session['full_name'] = user_data['full_name']
-        
-        if user_data['user_type'] == 'primary':
-            flash(f'Welcome back, {user_data["full_name"]}! You have full access to all features.', 'success')
-        else:
-            flash(f'Welcome, {user_data["full_name"]}! You are logged in successfully.', 'success')
-        
-        return redirect(url_for('home'))
+    if not username or not password:
+        flash('Please enter both username and password.', 'danger')
+        return redirect(url_for('index'))
     
-    # Mock authentication - accept any non-empty credentials for demo
-    elif username and password:
+    # Query user from database
+    user = User.query.filter_by(username=username).first()
+    
+    if user and user.check_password(password):
+        # Successful login
         session['logged_in'] = True
-        session['username'] = username
-        session['user_type'] = 'demo'
-        session['full_name'] = username.title()
-        flash('Demo access granted. For full features, use registered credentials.', 'info')
+        session['username'] = user.username
+        session['user_type'] = user.user_type
+        session['full_name'] = user.full_name
+        session['user_id'] = user.id
+        
+        # Update last login timestamp
+        user.update_last_login()
+        
+        if user.user_type == 'primary':
+            flash(f'Welcome back, {user.full_name}! You have full access to all features.', 'success')
+        else:
+            flash(f'Welcome, {user.full_name}! You are logged in successfully.', 'success')
+        
         return redirect(url_for('home'))
     else:
         flash('Invalid username or password. Please try again.', 'danger')
@@ -200,6 +170,7 @@ def forgot_password():
 
 @app.route('/send-otp', methods=['POST'])
 def send_otp():
+    """Send OTP for password reset"""
     mobile_number = request.form.get('mobile_number')
     
     if not mobile_number:
@@ -209,29 +180,33 @@ def send_otp():
     # Normalize the mobile number
     normalized_mobile = normalize_mobile_number(mobile_number)
     
-    # Find user by mobile number - strict validation
-    username, user_data = None, None
-    for user, data in USERS_DB.items():
-        if normalize_mobile_number(data['mobile']) == normalized_mobile:
-            username, user_data = user, data
-            break
+    # Find user by mobile number
+    user = User.query.filter_by(mobile=normalized_mobile).first()
     
-    if not user_data:
+    if not user:
         flash('Mobile number not found in our records. Please use your registered mobile number.', 'danger')
         return redirect(url_for('forgot_password'))
     
-    # Generate and store OTP
-    otp = generate_otp()
-    OTP_STORAGE[mobile_number] = {
-        'otp': otp,
-        'timestamp': datetime.now(),
-        'username': username
-    }
+    # Generate OTP
+    otp_code = generate_otp()
+    
+    # Store OTP in database
+    # Delete any existing OTPs for this mobile
+    OTP.query.filter_by(mobile=normalized_mobile, is_used=False).delete()
+    
+    new_otp = OTP(
+        mobile=normalized_mobile,
+        otp_code=otp_code,
+        username=user.username,
+        expires_at=datetime.utcnow() + timedelta(minutes=5)
+    )
+    db.session.add(new_otp)
+    db.session.commit()
     
     # Send OTP (simulated)
-    if send_otp_sms(mobile_number, otp):
-        session['reset_mobile'] = mobile_number
-        flash(f'OTP sent to {mobile_number}. Check console for demo OTP.', 'success')
+    if send_otp_sms(normalized_mobile, otp_code):
+        session['reset_mobile'] = normalized_mobile
+        flash(f'OTP sent to {normalized_mobile}. Check console for demo OTP.', 'success')
         return redirect(url_for('verify_otp'))
     else:
         flash('Failed to send OTP. Please try again.', 'danger')
@@ -246,6 +221,7 @@ def verify_otp():
 
 @app.route('/verify-otp', methods=['POST'])
 def verify_otp_post():
+    """Verify OTP for password reset"""
     if 'reset_mobile' not in session:
         flash('Session expired. Please start again.', 'warning')
         return redirect(url_for('forgot_password'))
@@ -253,12 +229,18 @@ def verify_otp_post():
     mobile_number = session['reset_mobile']
     entered_otp = request.form.get('otp')
     
-    if is_otp_valid(mobile_number, entered_otp):
-        # OTP is valid, allow password reset
-        username = OTP_STORAGE[mobile_number]['username']
-        session['reset_username'] = username
-        # Clean up OTP
-        del OTP_STORAGE[mobile_number]
+    # Find valid OTP in database
+    otp_record = OTP.query.filter_by(
+        mobile=mobile_number,
+        otp_code=entered_otp,
+        is_used=False
+    ).first()
+    
+    if otp_record and otp_record.is_valid():
+        # OTP is valid
+        session['reset_username'] = otp_record.username
+        otp_record.mark_as_used()
+        
         flash('OTP verified successfully! You can now reset your password.', 'success')
         return redirect(url_for('reset_password'))
     else:
@@ -274,6 +256,7 @@ def reset_password():
 
 @app.route('/reset-password', methods=['POST'])
 def reset_password_post():
+    """Reset user password"""
     if 'reset_username' not in session:
         flash('Session expired. Please start again.', 'warning')
         return redirect(url_for('forgot_password'))
@@ -291,36 +274,53 @@ def reset_password_post():
         return render_template('reset_password.html')
     
     # Update password in database
-    USERS_DB[username]['password'] = new_password
-    
-    # Clean up session
-    session.pop('reset_mobile', None)
-    session.pop('reset_username', None)
-    
-    flash('Password reset successfully! You can now login with your new password.', 'success')
-    return redirect(url_for('index'))
+    user = User.query.filter_by(username=username).first()
+    if user:
+        user.set_password(new_password)
+        db.session.commit()
+        
+        # Clean up session
+        session.pop('reset_mobile', None)
+        session.pop('reset_username', None)
+        
+        flash('Password reset successfully! You can now login with your new password.', 'success')
+        return redirect(url_for('index'))
+    else:
+        flash('User not found. Please try again.', 'danger')
+        return redirect(url_for('forgot_password'))
 
 @app.route('/resend-otp', methods=['POST'])
 def resend_otp():
+    """Resend OTP for password reset"""
     if 'reset_mobile' not in session:
         return jsonify({'success': False, 'message': 'Session expired'})
     
     mobile_number = session['reset_mobile']
-    username, user_data = get_user_by_mobile(mobile_number)
     
-    if not user_data:
+    # Find user by mobile
+    user = User.query.filter_by(mobile=mobile_number).first()
+    
+    if not user:
         return jsonify({'success': False, 'message': 'Mobile number not registered'})
     
     # Generate new OTP
-    otp = generate_otp()
-    OTP_STORAGE[mobile_number] = {
-        'otp': otp,
-        'timestamp': datetime.now(),
-        'username': username
-    }
+    otp_code = generate_otp()
+    
+    # Delete old OTPs
+    OTP.query.filter_by(mobile=mobile_number, is_used=False).delete()
+    
+    # Create new OTP
+    new_otp = OTP(
+        mobile=mobile_number,
+        otp_code=otp_code,
+        username=user.username,
+        expires_at=datetime.utcnow() + timedelta(minutes=5)
+    )
+    db.session.add(new_otp)
+    db.session.commit()
     
     # Send OTP
-    if send_otp_sms(mobile_number, otp):
+    if send_otp_sms(mobile_number, otp_code):
         return jsonify({'success': True, 'message': 'OTP resent successfully'})
     
     return jsonify({'success': False, 'message': 'Failed to resend OTP'})
@@ -344,10 +344,12 @@ def prediction():
 
 @app.route('/performance')
 def performance():
+    """Display model performance metrics"""
     if not session.get('logged_in'):
         return redirect(url_for('index'))
     
-    metrics = predictor.get_model_performance()
+    pred = get_predictor()
+    metrics = pred.get_model_performance()
     return render_template('performance.html', metrics=metrics)
 
 @app.route('/dashboard')
@@ -358,6 +360,7 @@ def dashboard():
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    """Handle image prediction requests"""
     if not session.get('logged_in'):
         return jsonify({'error': 'Not authenticated'}), 401
     
@@ -374,8 +377,9 @@ def predict():
         file.save(filepath)
         
         try:
-            # Make prediction
-            result = predictor.predict(filepath)
+            # Make prediction using cached predictor
+            pred = get_predictor()
+            result = pred.predict(filepath)
             
             # Clean up uploaded file
             os.remove(filepath)
